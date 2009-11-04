@@ -9,7 +9,7 @@ use TRD::DebugLog;
 #$TRD::DebugLog::enabled = 1;
 
 use version;
-our $VERSION = '0.0.3';
+our $VERSION = '0.0.4';
 
 # Other recommended modules (uncomment to use):
 #  use IO::Prompt;
@@ -17,19 +17,20 @@ our $VERSION = '0.0.3';
 #  use Perl6::Slurp;
 #  use Perl6::Say;
 
-
 our $default_timeout = 5;	# sec
 our $default_interval = 60;	# sec
 
 #=======================================================================
 sub new {
 	my $pkg = shift;
+	my $name = (@_) ? shift : '';
 	my $host = (@_) ? shift : undef;
 	my $errfunc = (@_) ? shift : undef;
 	my $recoverfunc = (@_) ? shift : undef;
 	my $timeout = (@_) ? shift : $default_timeout;
 	my $interval = (@_) ? shift : $default_interval;
 	bless {
+		name => $name,
 		timeout => $timeout,
 		interval => $interval,
 		host => $host,
@@ -38,6 +39,18 @@ sub new {
 		pid => undef,
 		start => 0,
 	}, $pkg;
+}
+
+#=======================================================================
+sub setName
+{
+	my $self = shift;
+	my $name = (@_) ? shift : '';
+	$self->{'name'} = $name;
+	if( $self->{'start'} ){
+		$self->stop;
+		$self->start;
+	}
 }
 
 #=======================================================================
@@ -116,7 +129,7 @@ sub start
 	dlog( "<<<" );
 	my $self = shift;
 
-	my $retval = 0;
+	my $retval = 1;
 	if( $self->{'start'} ){
 		dlog( "already started." );
 	} else {
@@ -124,7 +137,7 @@ sub start
 		$pid = threads->new( \&ping_thread, $self );
 		$self->{'pid'} = $pid;
 		$self->{'start'} = 1;
-		$retval = 1;
+		$retval = 0;
 	}
 	dlog( ">>>" );
 	return $retval;
@@ -136,14 +149,14 @@ sub stop
 	dlog( "<<<" );
 	my $self = shift;
 
-	my $retval = 0;
+	my $retval = 1;
 	if( !$self->{'start'} ){
 		dlog( "already stoped." );
 	} else {
 		$self->{'pid'}->kill('KILL')->detach();
 		$self->{'pid'} = undef;
 		$self->{'start'} = 0;
-		$retval = 1;
+		$retval = 0;
 	}
 	dlog( ">>>" );
 	return $retval;
@@ -154,7 +167,7 @@ sub ping_thread
 {
 	dlog( "<<<" );
 	my $self = shift;
-	my $stat = 0;
+	my $stat = 1;
 	my $old_stat = undef;
 
 	$SIG{'KILL'} = sub { threads->exit(); };
@@ -164,14 +177,14 @@ sub ping_thread
 		my $t = 0;
 		while( 1 ){
 			if( $pid->is_running ){
-				$stat = 0;
+				$stat = 1;
 			} else {
 				$stat = $pid->join();
 				last;
 			}
 			if( $t >= $self->{'timeout'} ){
 				$pid->kill('KILL')->detach();
-				$stat = 0;
+				$stat = 1;
 				last;
 			}
 			sleep( 0.1 );
@@ -182,12 +195,12 @@ sub ping_thread
 				my $func = undef;
 dlog( "stat=${stat}" );
 				if( $stat ){
-					$func = $self->{'recoverfunc'};
-				} else {
 					$func = $self->{'errfunc'};
+				} else {
+					$func = $self->{'recoverfunc'};
 				}
 				if( ref( $func ) eq 'CODE' ){
-					&{$func}( $self->{'host'} );
+					&{$func}( $self->{'name'}, $self->{'host'} );
 				}
 			}
 		}
@@ -205,18 +218,18 @@ sub ping
 	my $self = shift;
 	dlog( "<<<". $self->{'host'} );
 	$SIG{'KILL'} = sub { threads->exit(); };
-	my $retval = 0;
+	my $retval = 1;
 
 	if( !$self->{'host'} ){
-		$retval = 0;
+		$retval = 1;
 	} else {
 		my $cmd = 'ping -c 1 -n -q '. $self->{'host'};
 		my $res = `${cmd}`;
 
 		if( $res =~m/ 0%/ ){
-			$retval = 1;
-		} else {
 			$retval = 0;
+		} else {
+			$retval = 1;
 		}
 	}
 	dlog( ">>>". $retval );

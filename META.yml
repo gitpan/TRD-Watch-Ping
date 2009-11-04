@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               TRD-Watch-Ping
-version:            0.0.3
+version:            0.0.4
 abstract:           [One line description of module's purpose here]
 author:
     - Takuya Ichikawa <ichi@cpan.org>
